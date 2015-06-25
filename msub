@@ -1,0 +1,242 @@
+#!/usr/bin/perl
+##-----------------------------------------------------------
+## prepares job-file and submits jaguar, molpro and orca jobs on Mason
+## last update: 12/09/2013
+## Syntax:  jsub <jobname> <cpus> <hours> <job_type> <version> <prog>
+##----------------------------------------------------------- 
+use strict;
+my $cpus;
+my $mem;
+my $procs;
+my $hours;
+my $cputime;
+my $job_type = "go";
+my $serial_parallel;
+my $tasks_per_node = 32;
+my $threads_per_proc = 1;
+my $nodes;
+my $version = 7;
+my $temp;
+my $jobdir;
+my $prog = "jag";
+my $filename;
+chomp(my $jobname = $ARGV[0]);
+my $user = getlogin();
+chomp (my $user = getlogin());
+chomp (my $pwd = `pwd`);
+## This section takes care of the non-interactive folks
+if($#ARGV >= 1) {
+   chomp($cpus = $ARGV[1]);
+   chomp($mem = $ARGV[2]);
+   chomp($hours = $ARGV[3]);
+   chomp($job_type = $ARGV[4]);
+   chomp($version = $ARGV[5]);
+   chomp($prog = $ARGV[6]);
+}
+## This section takes care of the interactive folks
+else{
+   if($ARGV[0] eq ""){print "Syntax: jsub <jobname> <cpus> <hours> <job_type> <version> <prog>\n"; exit}
+   else{
+      print "How many CPUs? (<RETURN> = 32)\n>>";
+      chomp($cpus = <STDIN>);
+              if($cpus == ""){$cpus = "32";}
+	  print "How much memory?  You must specify units.  (<RETURN> = 64gb)\n>>";
+      chomp($mem = <STDIN>);
+              if($mem == ""){$mem = "64gb";}
+      print "How much time in hours? (<RETURN> = 168)\n";
+      print "1d = 24  ; 2d = 48  ;  3d = 72  ;  4d = 96  ;  5d = 120 ;  6d = 144 ;  7d = 168\n";
+      print "8d = 192 ; 9d = 216 ; 10d = 240 ; 11d = 264 ; 12d = 288 ; 13d = 312 ; 14d = 336(max)\n>>";
+      chomp($hours = <STDIN>);
+          if($hours == ""){$hours = "168";}
+      ## if this is a jaguar job, the input file CalcID.in should exist
+      ## let's make jaguar the default so that the user can just hit return and get this job launched
+      $filename = "$pwd/$jobname.in";
+      if (-e $filename) {      
+             print "What program? (<RETURN> = JAGUAR; m = MOLPRO; o = ORCA)\n>>";
+             chomp($prog = <STDIN>);
+             if($prog eq ""){$prog = "jag";}
+          }
+          ## if this is an orca job, the input file CalcID.inp should exist
+          ## let's make orca the default so that the user can just hit return and get this job launched
+      else{
+         $filename = "$pwd/$jobname.inp";
+         if (-e $filename){      
+                print "What program? (<RETURN> = ORCA; j = JAGUAR; m = MOLPRO)\n>>";
+                chomp($prog = <STDIN>);
+                if($prog eq ""){$prog = "orca";}
+             }
+             else {
+                print "No valid input file found!";
+                exit;
+             }
+          }
+      ## assigning program   
+          if($prog eq "j"){$prog = "jag";}
+          if($prog eq "o"){$prog = "orca";}
+          if($prog eq "m"){$prog = "mp";}
+   }
+}
+## Set up the cpu/node information
+if($cpus > 1){
+   $serial_parallel = "parallel";
+   if($cpus <= 32){$nodes = 1; $tasks_per_node = $cpus; $cputime = $cpus*$hours; }
+   elsif($cpus%32 != 0){print "ERROR: \# of CPUs must be multiple of 32 if greater than 32\n"; exit;}
+   else{$nodes = $cpus/32; $cputime = $cpus*$hours;}
+}
+else{
+   $cpus = 1;
+   $serial_parallel = "serial";
+   $tasks_per_node = 1;
+   $nodes = 1;
+        $cputime = $hours;
+}
+open(WRITE, ">$jobname.job") || die "Cannot open file for writing\n";
+## Setup the PBS commands
+print WRITE "\#\!\/bin\/tcsh\n";
+print WRITE "\#\n";
+print WRITE "\#PBS \-k o\n";
+## If 0.5 hours were requested, direct the job to debug queue
+if($hours == "0.5"){
+    print WRITE "\#PBS \-l nodes\=$nodes\:ppn\=$tasks_per_node\,cput\=30\:00\n";
+    print WRITE "\#PBS \-l walltime\=30\:00\n";
+    print WRITE "\#PBS \-q debug\n";
+}
+else{
+    print WRITE "\#PBS \-l nodes\=$nodes\:ppn\=$tasks_per_node\,vmem\=$mem\,cput\=$cputime\:00\:00\n";
+    print WRITE "\#PBS \-l walltime\=$hours\:00\:00\n"; 
+}
+print WRITE "\#PBS \-N $jobname\n";
+print WRITE "\#PBS \-r n\n";
+print WRITE "\#PBS \-j oe\n";
+print WRITE "\#\n";
+print WRITE "\n";
+# number of threads vs number of processes:
+# we should play around to find a good balance between no of processes vs no of threads
+# for now, hard code a few typical one
+if($cpus == 1) {$threads_per_proc = 1; $procs = 1;}
+elsif ($cpus == 2) {$threads_per_proc = 2; $procs = 1;}
+elsif ($cpus == 3) {$threads_per_proc = 3; $procs = 1;}
+elsif ($cpus == 4) {$threads_per_proc = 4; $procs = 1;}
+elsif ($cpus == 5) {$threads_per_proc = 5; $procs = 1;}
+elsif ($cpus == 6) {$threads_per_proc = 3; $procs = 2;}
+elsif ($cpus == 7) {$threads_per_proc = 7; $procs = 1;}
+elsif ($cpus == 8) {$threads_per_proc = 4; $procs = 2;}
+elsif ($cpus == 9) {$threads_per_proc = 9; $procs = 1;}
+elsif ($cpus == 10) {$threads_per_proc = 5; $procs = 2;}
+elsif ($cpus == 11) {$threads_per_proc = 11; $procs = 1;}
+elsif ($cpus == 12) {$threads_per_proc = 4; $procs = 3;}
+elsif ($cpus == 13) {$threads_per_proc = 4; $procs = 3;}
+elsif ($cpus == 14) {$threads_per_proc = 7; $procs = 2;}
+elsif ($cpus == 15) {$threads_per_proc = 7; $procs = 2;}
+elsif ($cpus == 16) {$threads_per_proc = 8; $procs = 2;}
+elsif ($cpus == 17) {$threads_per_proc = 8; $procs = 2;}
+elsif ($cpus == 18) {$threads_per_proc = 6; $procs = 3;}
+elsif ($cpus == 19) {$threads_per_proc = 6; $procs = 3;}
+elsif ($cpus == 20) {$threads_per_proc = 5; $procs = 4;}
+elsif ($cpus == 21) {$threads_per_proc = 7; $procs = 3;}
+elsif ($cpus == 22) {$threads_per_proc = 7; $procs = 3;}
+elsif ($cpus == 23) {$threads_per_proc = 8; $procs = 3;}
+elsif ($cpus == 24) {$threads_per_proc = 6; $procs = 4;}
+elsif ($cpus == 25) {$threads_per_proc = 5; $procs = 5;}
+elsif ($cpus == 26) {$threads_per_proc = 9; $procs = 3;}
+elsif ($cpus == 27) {$threads_per_proc = 9; $procs = 3;}
+elsif ($cpus == 28) {$threads_per_proc = 7; $procs = 4;}
+elsif ($cpus == 29) {$threads_per_proc = 7; $procs = 4;}
+elsif ($cpus == 30) {$threads_per_proc = 6; $procs = 5;}
+elsif ($cpus == 31) {$threads_per_proc = 6; $procs = 5;}
+elsif ($cpus == 32) {$threads_per_proc = 8; $procs = 4;}
+#***** JAGUAR *****
+if($prog =~ "jag"){
+   ## Set environmental variables, setup MPI, run Jaguar
+   print WRITE "echo Job_ID\:\$PBS_JOBID \>\> $pwd\/$jobname\.ID\n";
+   ## Set directory for specific version
+    ## deactivated for now. Define the SCHRODINGER home directory in your .cshrc file - we now assume that the variable SCHRODINGER is already defined
+    #
+    #   if($version == "5.5"){print WRITE "setenv SCHRODINGER \~\/schrodinger55\n";}
+    #   elsif($version == "6.5"){print WRITE "setenv SCHRODINGER \~\/schrodinger65\n";}
+    #   elsif($version == "6"){print WRITE "setenv SCHRODINGER \~\/schrodinger60\n";}
+    #   elsif($version == "7"){print WRITE "setenv SCHRODINGER \~\/schrodinger\n";}
+    #   else{print WRITE "setenv SCHRODINGER \~\/schrodinger\n";}   
+   print WRITE "setenv JOBDIR $pwd\n";
+   # - use dc2 scratch - this is normal operation
+   print WRITE "mkdir \/N\/dc2\/scratch\/$user\n";
+   print WRITE "rm \-rf \/N\/dc2\/scratch\/$user\/$jobname\n";
+   # - use /dc2wan - in case dc2 is out
+   #print WRITE "mkdir \/N\/dc2wan\/scratch\/$user\n";
+   #print WRITE "rm \-rf \/N\/dc2wan\/scratch\/$user\/$jobname\n";
+   # - use gpfs - if nothing else is available
+   #print WRITE "mkdir \/N\/gpfsbr\/$user\n";
+   #print WRITE "rm \-rf \/N\/gpfsbr\/$user\/$jobname\n";
+   print WRITE "cd \$JOBDIR\n";
+   #print WRITE "setenv SCHRODINGER_TMPDIR \/tmp\n";
+   print WRITE "setenv SCHRODINGER_TMPDIR \/N\/dc2\/scratch\n";
+   #print WRITE "setenv SCHRODINGER_TMPDIR \/N\/dc2wan\/scratch\n";
+   #print WRITE "setenv SCHRODINGER_TMPDR \/N\/gpfsbr\n";
+   #print WRITE "setenv TEMPDIR \/tmp\/$user\/$jobname\n";
+   print WRITE "setenv TEMPDIR \/N\/dc2\/scratch\/$user\/$jobname\n";
+   print WRITE "cat \$PBS_NODEFILE \| sort \| awk \'BEGIN \{node\=\$0\;i\=1\} length\(node\)\=\=0 \{node\=\$0\;next\} \$0\=\=node \{i\=i\+1\;next\} \$0\!\=node \{print node ;node\=\$0\;next\} END \{print node \}' \>\$JOBDIR\/nodefile\n";
+   ## Set up parallel is $parallel_serial flag set to parallel
+   print WRITE "setenv SCHRODINGER_NODEFILE $pwd\/nodefile\n";
+   print WRITE "setenv SCHRODINGER_MPI_FLAGS \'--mca btl self,sm\'\n";
+   print WRITE "module load ccm\n";
+   print WRITE "ccmrun \$SCHRODINGER\/jaguar run -WAIT -FORCE -DDEBUG -PROCS $procs -TPP $threads_per_proc $jobname\n";
+   print WRITE "rm \-rf $pwd\/$jobname\.nbo\n";
+   print WRITE "rm \-rf \*\.zip\n";
+   print WRITE "echo $jobname >>~\/.job_done.log\n";
+}
+elsif($prog =~ "mp"){
+  print WRITE "\/N\/soft\/linux-rhel4-x86_64\/molpro2008.1\/bin\/molpro -n $cpus -d \$TEMPDIR -W \$JOBDIR -o \$JOBDIR\/$jobname.out \$JOBDIR\/$jobname.in\n"; 
+   print WRITE "rm -rf *.zip\n";
+}
+elsif($prog =~ "orca"){
+   print WRITE "rm \-rf \/N\/dc2\/scratch\/$user\/$jobname\n";
+   print WRITE "set TEMPDIR='/N/dc2/scratch/$user/$jobname'\n";
+   print WRITE "set ORCADIR='/N/dc2/scratch/baikgrp/orca_3_0_0_linux_x86-64/'\n";
+   print WRITE "set PATH = (\$PATH \$ORCADIR)\n";
+   print WRITE "mkdir -p \$TEMPDIR\n";
+   print WRITE "echo Job_ID\:\$PBS_JOBID \>\> $pwd\/$jobname\.ID\n";
+   print WRITE "cat \$PBS_NODEFILE | sort | awk 'BEGIN {node=$0;i=1} length(node)==0 {node=$0;next} $0==node {i=i+1;next} $0!=node {print node ;node=$0;next} END {print node }' >\$JOBDIR/nodefile\n";
+   print WRITE "cd \$PBS_O_WORKDIR\n";
+   print WRITE "echo %pal nprocs $cpus end >>$jobname.in\n";
+   print WRITE "cp \$PBS_O_WORKDIR/$jobname.in \$TEMPDIR\n";
+   print WRITE "cp \$PBS_O_WORKDIR/*.gbw \$TEMPDIR\n";
+   print WRITE "cp \$PBS_O_WORKDIR/$jobname.hess \$TEMPDIR\n";
+   print WRITE "cd \$TEMPDIR\n";
+   #print WRITE "module load ccm\n";
+   #print WRITE "module load /N/soft/rhel6/modules/quarry/DEVELOPMENT/openmpi/gnu/1.4.5\n";
+   print WRITE " /N/dc2/scratch/baikgrp/orca_3_0_0_linux_x86-64/./orca $jobname.in >& \$PBS_O_WORKDIR/$jobname.out\n";
+   print WRITE "cp \$TEMPDIR/$jobname.gbw \$PBS_O_WORKDIR\n";
+  # print WRITE "mv $jobname.gbw restart.gbw\n";
+   print WRITE "cp \$TEMPDIR/$jobname.hess \$PBS_O_WORKDIR\n";
+   print WRITE "rm -rf \$TEMPDIR\n";
+}
+elsif($prog == "orca"){
+   print WRITE "rm \-rf \/N\/dc2\/scratch\/$user\/$jobname\n";
+   print WRITE "set TEMPDIR='/N/dc2/scratch/$user/$jobname'\n";
+   print WRITE "set ORCADIR='/N/dc2/scratch/baikgrp/orca_3_0_0_linux_x86-64/'\n";
+   print WRITE "set PATH = (\$PATH \$ORCADIR)\n";
+   print WRITE "mkdir -p \$TEMPDIR\n";
+   print WRITE "echo Job_ID\:\$PBS_JOBID \>\> $pwd\/$jobname\.ID\n";
+   print WRITE "cat \$PBS_NODEFILE | sort | awk 'BEGIN {node=$0;i=1} length(node)==0 {node=$0;next} $0==node {i=i+1;next} $0!=node {print node ;node=$0;next} END {print node }' >\$JOBDIR/nodefile\n";
+   print WRITE "cd \$PBS_O_WORKDIR\n";
+   print WRITE "echo %pal nprocs $cpus end >>$jobname.in\n";
+   print WRITE "cp \$PBS_O_WORKDIR/$jobname.in \$TEMPDIR\n";
+   print WRITE "cp \$PBS_O_WORKDIR/*.gbw \$TEMPDIR\n";
+   print WRITE "cp \$PBS_O_WORKDIR/$jobname.hess \$TEMPDIR\n";
+   print WRITE "cd \$TEMPDIR\n";
+   #print WRITE "module load ccm\n";
+   #print WRITE "module load /N/soft/rhel6/modules/quarry/DEVELOPMENT/openmpi/gnu/1.4.5\n";
+   print WRITE " /N/dc2/scratch/baikgrp/orca_3_0_0_linux_x86-64/./orca $jobname.in >& \$PBS_O_WORKDIR/$jobname.out\n";
+   print WRITE "cp \$TEMPDIR/$jobname.gbw \$PBS_O_WORKDIR\n";
+   # print WRITE "mv $jobname.gbw restart.gbw\n";
+   print WRITE "cp \$TEMPDIR/$jobname.hess \$PBS_O_WORKDIR\n";
+   print WRITE "rm -rf \$TEMPDIR\n";
+}
+
+if($#ARGV >= 1){system("qsub $jobname.job")}
+else{
+   print "Submit Job? (Y or N, DEFAULT \= Y)\n";
+   chomp(my $launch = <STDIN>);
+   if($launch !~ /n/i){system("qsub $jobname.job")}
+}
+exit;

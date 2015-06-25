@@ -1,0 +1,5 @@
+load E:\Data\DC_SpinCrossover\DC_CoCAS_110C3\DC_CoCAS_110C3.xyz
+isoSurface pos 0.05 E:\Data\DC_SpinCrossover\DC_CoCAS_110C3\DC_CoCAS_110C3.mo296a.cube
+isoSurface neg -0.05 E:\Data\DC_SpinCrossover\DC_CoCAS_110C3\DC_CoCAS_110C3.mo296a.cube
+color $pos red
+color $neg blue

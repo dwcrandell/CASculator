@@ -1,0 +1,4 @@
+“Recently I’ve been having to mess around with a lot of double shell effect stuff, and today I started working on an active space for a “water attack” TS for O-O bond formation.  It is really messy and complicated (16,13) and there are a lot of orbitals to track down.  Anyway using the Calculator finding the active spaces has been a breeze despite the intrinsic messiness and has saved me hours and lots of grief and confusion.  I was so pleased with how easy it was I just had to let you know what a satisfied customer I am :-)”
+
+-Daniel Ashley
+Ph.D. Candidate, Indiana University
